@@ -172,6 +172,17 @@ write.csv(runs, "RE24.csv")
 
 
 
+## Adding in Batting Orders ----------------------------------------- 
+data2019 %>% 
+  group_by(BAT_ID, BAT_LINEUP_ID) %>%  
+  summarize(N = n()) %>%  
+  arrange(desc(N)) %>%  
+  mutate(Batting_order = first(BAT_LINEUP_ID)) -> positions
 
+positions %>%
+  select(BAT_ID, Batting_order) %>%
+  unique() -> batting_orders
+
+write.csv(batting_orders, "batting_orders.csv")
 
 
