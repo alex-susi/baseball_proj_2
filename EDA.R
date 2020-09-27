@@ -1,11 +1,18 @@
 library(ggplot2)
 library(dplyr)
+library(Lahman)
+library(nnet)
 
 ## Read in RE24 --------------------------------------------------------
 re24 <- read.csv("RE24.csv")
 re24 <- re24[-1]
 re24 %>%
   filter(PA >= 300) -> re24_300
+
+
+
+
+
 
 
 
@@ -23,8 +30,7 @@ cor(re24_300$Runs_Start_risp, re24_300$PA_risp)
 cor(re24_300$Runs_Start_no_risp, re24_300$PA_no_risp)
 
 
-re24_300 %>%
-  mutate(RE24_difference = RE24_risp - RE24_no_risp) -> re24_300
+
 
 
 
@@ -48,7 +54,16 @@ re24_300 %>%
   head()
 
 re24_300 %>%
-  filter(nameLast == "Urshela")
+  arrange(desc(RE24_no_risp_per_RS)) %>%
+  head()
+
+re24_300 %>%
+  filter(nameLast == "Encarnacion")
+
+
+
+
+
 
 
 
@@ -66,7 +81,14 @@ positions %>%
 re24_300 %>%
   inner_join(batting_orders, by = "BAT_ID") -> re24_300
 
+re24_300 %>%
+  mutate(RE24_difference = RE24_risp - RE24_no_risp,
+         RE24_risp_per_RS = RE24_risp/Runs_Start_risp,
+         RE24_no_risp_per_RS = RE24_no_risp/Runs_Start_no_risp) %>%
+  relocate(Batting_order, .after = RE24_no_risp_per_RS) %>% 
+  mutate_if(is.numeric, round, digits = 4) -> re24_300
 
+# Averages by Batting Order
 re24_300 %>%
   group_by(Batting_order) %>%
   mutate(avg_RE24 = mean(RE24), 
@@ -87,6 +109,7 @@ re24_300 %>%
   as.data.frame() %>%
   mutate_if(is.numeric, round, digits = 2) -> averages_by_batting_order
 
+# Correlations
 cor(averages_by_batting_order$avg_RE24, 
     averages_by_batting_order$avg_PA)
 cor(averages_by_batting_order$avg_Runs_Start, 
@@ -113,11 +136,14 @@ averages_by_batting_order %>%
   mutate_if(is.numeric, round, digits = 4) -> re24_rates
   
 
-
+# Plot
 ggplot(averages_by_batting_order, aes(Batting_order, avg_RE24)) +
   geom_point() +
   geom_hline(yintercept = 0, color = "black") +
   geom_vline(xintercept = 0, color = "black") -> batting_order_plot
+
+
+
 
 
 
@@ -137,7 +163,11 @@ ggplot(re24_300, aes(RE24_no_risp, RE24_risp,
                               "violet", "sienna", "black")) -> risp_plot
 risp_plot
 
-risp_plot %+% subset(re24_300, Batting_order %in% c("3","4"))
+risp_plot %+% subset(re24_300, Batting_order %in% c("1","4"))
+
+
+
+
 
 
 
@@ -156,6 +186,11 @@ batters_2019 %>%
 
 batters_2019 %>%
   filter(playerID == "encared01")
+
+
+
+
+
 
 
 
@@ -192,7 +227,7 @@ maximize_re24 <- function(batter) {
   
 }
 
-test_id <- "urshg001"
+test_id <- "troum001"
 orders <- c(1:9)
 
 batter_re24_risp <- re24_300 %>%
@@ -246,4 +281,68 @@ for (i in orders){
 
 
 
+## Predicting Batting Order ---------------------------------------
+re24_300$Batting_order <- as.factor(re24_300$Batting_order) 
+fit <- multinom(Batting_order ~ RE24_risp_per_RS + RE24_no_risp_per_RS, 
+           data = re24_300)
+summary(fit)
+predict(fit)
+predict_fit <- as.vector(predict(fit))
 
+
+probs <- round(predict(fit, type = "prob"), digits = 4)
+error <- table(predict(fit), re24_300$Batting_order)
+sum(diag(error))/sum(error)
+
+# P-values
+z <- summary(fit)$coefficients/summary(fit)$standard.errors
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+
+# Adding results to RE24_300
+ids <- re24_300$BAT_ID
+results <- as.data.frame(predict_fit, ids, col.names = headers)
+results$BAT_ID <- ids
+names(results)[1] <- "Predicted_order"
+re24_300_predict <- merge(re24_300, results, by = "BAT_ID")
+
+player_probs <- as.data.frame(probs)
+player_probs$BAT_ID <- ids
+player_probs <- player_probs[,c(10,1,2,3,4,5,6,7,8,9)]
+
+player_probs %>%
+  filter(BAT_ID == "troum001")
+
+re24_300_predict %>%
+  filter(BAT_ID == "troum001")
+
+re24_300_predict %>%
+  arrange(desc(RE24_risp_per_RS)) %>%
+  head()
+
+re24_300_predict %>%
+  arrange((Predicted_order)) %>%
+  head()
+
+
+re24_300_predict %>%
+  group_by(Predicted_order) %>%
+  mutate(avg_RE24 = mean(RE24), 
+         avg_PA = mean(PA), 
+         avg_Runs_Start = mean(Runs.Start),
+         avg_RE24_risp = mean(RE24_risp), 
+         avg_PA_risp = mean(PA_risp), 
+         avg_Runs_Start_risp = mean(Runs_Start_risp),
+         avg_RE24_no_risp = mean(RE24_no_risp), 
+         avg_PA_no_risp = mean(PA_no_risp), 
+         avg_Runs_Start_no_risp = mean(Runs_Start_no_risp),
+         avg_RE24_diff = mean(RE24_difference),
+         avg_RE24_risp_per_RS = mean(RE24_risp_per_RS),
+         avg_RE24_no_risp_per_RS = mean(RE24_no_risp_per_RS)) %>%
+  summarize(N = n(), avg_RE24, avg_PA, avg_Runs_Start, 
+            avg_RE24_risp, avg_PA_risp, avg_Runs_Start_risp, 
+            avg_RE24_no_risp, avg_PA_no_risp, avg_Runs_Start_no_risp,
+            avg_RE24_diff, avg_RE24_risp_per_RS,
+            avg_RE24_no_risp_per_RS) %>%
+  unique() %>%
+  as.data.frame() %>%
+  mutate_if(is.numeric, round, digits = 4) -> averages_by_batting_order
