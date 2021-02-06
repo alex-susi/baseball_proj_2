@@ -21,6 +21,7 @@ ggplot(re24_300, aes(RE24_no_risp, RE24_risp)) +
   geom_point() + 
   geom_hline(yintercept = 0, color = "blue") +
   geom_vline(xintercept = 0, color = "blue") -> risp_plot
+risp_plot
 cor(re24_300$RE24_risp, re24_300$RE24_no_risp)
 cor(re24_300$RE24_risp, re24_300$Runs_Start_risp)
 cor(re24_300$RE24_no_risp, re24_300$Runs_Start_no_risp)
@@ -131,7 +132,8 @@ averages_by_batting_order %>%
   mutate(RE24_per_RS = avg_RE24/avg_Runs_Start,
          RE24_risp_per_RS = avg_RE24_risp/avg_Runs_Start_risp,
          RE24_no_risp_per_RS = avg_RE24_no_risp/avg_Runs_Start_no_risp) %>%
-  select(Batting_order, RE24_per_RS, RE24_risp_per_RS, RE24_no_risp_per_RS) %>%
+  select(Batting_order, RE24_per_RS, 
+         RE24_risp_per_RS, RE24_no_risp_per_RS) %>%
   as.data.frame() %>%
   mutate_if(is.numeric, round, digits = 4) -> re24_rates
   
@@ -141,6 +143,24 @@ ggplot(averages_by_batting_order, aes(Batting_order, avg_RE24)) +
   geom_point() +
   geom_hline(yintercept = 0, color = "black") +
   geom_vline(xintercept = 0, color = "black") -> batting_order_plot
+
+averages_by_batting_order %>%
+  select(Batting_order, avg_RE24, avg_RE24_risp, avg_RE24_no_risp) ->
+  averages_by_batting_order_sub
+
+library(reshape2)
+avgs_by_bat <- melt(averages_by_batting_order_sub, id.vars = "Batting_order")
+
+ggplot(avgs_by_bat) +
+  geom_line(aes(x = Batting_order, 
+            y =  value,
+            colour = variable)) +
+  scale_colour_manual(values = c("red", "darkgreen", "blue")) +
+  geom_hline(yintercept = 0, color = "black") +
+  geom_vline(xintercept = 0, color = "black") +
+  scale_x_continuous(breaks = c(1,2,3,
+                     4,5,6,
+                     7,8,9))-> batting_order_plot2
 
 
 
@@ -163,7 +183,7 @@ ggplot(re24_300, aes(RE24_no_risp, RE24_risp,
                               "violet", "sienna", "black")) -> risp_plot
 risp_plot
 
-risp_plot %+% subset(re24_300, Batting_order %in% c("1","4"))
+risp_plot %+% subset(re24_300, Batting_order %in% c("2","8"))
 
 
 
@@ -227,7 +247,8 @@ maximize_re24 <- function(batter) {
   
 }
 
-test_id <- "troum001"
+test_id <- "lemad001"
+#test_id <- 
 orders <- c(1:9)
 
 batter_re24_risp <- re24_300 %>%
@@ -273,7 +294,7 @@ for (i in orders){
   df9 <- df9 %>%
     arrange(desc(X2))
 }
-
+df9
 
 
 
@@ -283,6 +304,7 @@ for (i in orders){
 
 ## Predicting Batting Order ---------------------------------------
 re24_300$Batting_order <- as.factor(re24_300$Batting_order) 
+re24_300$Batting_order <- relevel(re24_300$Batting_order, ref = "8")
 fit <- multinom(Batting_order ~ RE24_risp_per_RS + RE24_no_risp_per_RS, 
            data = re24_300)
 summary(fit)
@@ -307,13 +329,14 @@ re24_300_predict <- merge(re24_300, results, by = "BAT_ID")
 
 player_probs <- as.data.frame(probs)
 player_probs$BAT_ID <- ids
-player_probs <- player_probs[,c(10,1,2,3,4,5,6,7,8,9)]
+player_probs <- player_probs[,c("BAT_ID","1","2","3",
+                                "4","5",'6','7','8','9')]
 
 player_probs %>%
-  filter(BAT_ID == "troum001")
+  filter(BAT_ID == "sancg002")
 
 re24_300_predict %>%
-  filter(BAT_ID == "troum001")
+  filter(BAT_ID == "sancg002")
 
 re24_300_predict %>%
   arrange(desc(RE24_risp_per_RS)) %>%
@@ -346,3 +369,56 @@ re24_300_predict %>%
   unique() %>%
   as.data.frame() %>%
   mutate_if(is.numeric, round, digits = 4) -> averages_by_batting_order
+
+
+
+
+
+
+## MACHINE LEARNING --------------------------------------------------
+head(re24_300)
+
+re24_300 %>%
+  ggvis(~RE24_no_risp, ~RE24_risp, fill = ~Batting_order) %>%
+  layer_points()
+
+re24_300 %>%
+  select(nameFirst, nameLast, BAT_ID, PA, RE24_risp, 
+         RE24_no_risp, Batting_order) -> re24_300_short
+
+re24_300 %>%
+  select(PA, RE24_risp, RE24_no_risp, Batting_order) -> re24_knn
+  
+set.seed(1234)
+ind <- sample(2, nrow(re24_knn), replace = TRUE, prob = c(0.67, 0.33))
+
+re24.training <- re24_knn[ind==1, 1:3]
+re24.test <- re24_knn[ind==2, 1:3]
+
+re24.trainLabels <- re24_knn[ind==1, 4]
+re24.testLabels <- re24_knn[ind==2, 4]
+
+
+re24_pred <- knn(train = re24.training, test = re24.test, 
+                 cl = re24.trainLabels, k = 3)
+
+re24TestLabels <- data.frame(re24.testLabels)
+merge <- data.frame(re24_pred, re24TestLabels)
+names(merge) <- c("Predicted Order",
+                  "Observed Order")
+merge
+merge[1]
+
+
+CrossTable(re24.testLabels, 
+           re24_pred, 
+           prop.chisq = FALSE)
+
+re24_test_results <- data.frame(re24.test, merge)
+re24_test_results <- inner_join(re24_test_results, re24_300_short)
+re24_test_results %>%
+  select(nameFirst, nameLast, BAT_ID, PA, 
+         RE24_risp, RE24_no_risp, Predicted.Order,
+         Observed.Order) -> re24_test_results
+re24_test_results
+

@@ -5,11 +5,17 @@ library(tidyr)
 ## Getting Retrosheet Data ------------------------------------------------
 source("parse_retrosheet_pbp.R")
 parse_retrosheet_pbp(2019)
+parse_retrosheet_pbp(2020)
 
 fields <- read.csv("fields.csv")
 data2019 <- read.csv("retrosheet/unzipped/all2019.csv", 
                      col.names = pull(fields, Header)) 
+data2020 <- read.csv("retrosheet/unzipped/all2020.csv", 
+                     col.names = pull(fields, Header)) 
 
+
+
+#calculateRE24 <- function(year)
 
 
 ## Calculating RE24 -------------------------------------------------------
