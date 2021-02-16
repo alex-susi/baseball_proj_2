@@ -151,6 +151,8 @@ averages_by_batting_order %>%
 library(reshape2)
 avgs_by_bat <- melt(averages_by_batting_order_sub, id.vars = "Batting_order")
 
+
+pdf("batting_order_plot.pdf")
 ggplot(avgs_by_bat) +
   geom_line(aes(x = Batting_order, 
             y =  value,
@@ -160,9 +162,9 @@ ggplot(avgs_by_bat) +
   geom_vline(xintercept = 0, color = "black") +
   scale_x_continuous(breaks = c(1,2,3,
                      4,5,6,
-                     7,8,9))-> batting_order_plot2
-
-
+                     7,8,9))
+dev.off()
+batting_order_plot2
 
 
 
@@ -375,7 +377,9 @@ re24_300_predict %>%
 
 
 
-## MACHINE LEARNING --------------------------------------------------
+## KNN Model --------------------------------------------------
+library(gmodels)
+library(class)
 head(re24_300)
 
 re24_300 %>%
@@ -392,11 +396,21 @@ re24_300 %>%
 set.seed(1234)
 ind <- sample(2, nrow(re24_knn), replace = TRUE, prob = c(0.67, 0.33))
 
+
+# Box Plot
+x1 <- re24_knn[,2:3]
+y1 <- as.factor(re24_knn[,4])
+library(caret)
+featurePlot(x=x1, y=y1, plot="box")
+
+
+# Building Training and Testing Groups
 re24.training <- re24_knn[ind==1, 1:3]
 re24.test <- re24_knn[ind==2, 1:3]
 
 re24.trainLabels <- re24_knn[ind==1, 4]
 re24.testLabels <- re24_knn[ind==2, 4]
+
 
 
 re24_pred <- knn(train = re24.training, test = re24.test, 
@@ -414,6 +428,7 @@ CrossTable(re24.testLabels,
            re24_pred, 
            prop.chisq = FALSE)
 
+# Model Results
 re24_test_results <- data.frame(re24.test, merge)
 re24_test_results <- inner_join(re24_test_results, re24_300_short)
 re24_test_results %>%
